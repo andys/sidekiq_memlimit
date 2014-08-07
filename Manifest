@@ -1,0 +1,6 @@
+CHANGELOG
+Manifest
+README.md
+Rakefile
+lib/sidekiq_memlimit.rb
+test/sidekiq_memlimit.rb
