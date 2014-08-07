@@ -14,6 +14,7 @@ class SidekiqMemlimit
                 if max_mb && mb > max_mb
                   Sidekiq.logger.error "#{self}: Exceeded max memory limit (#{mb} > #{max_mb} MB)"
                   Process.kill('USR1', $$)
+                  Thread.stop
                 end
               end
               sleep sleep_time
