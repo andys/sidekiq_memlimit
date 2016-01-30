@@ -4,21 +4,25 @@ class SidekiqMemlimit
     attr_reader :monitorthread
 
     def start_monitorthread
+      default_killproc = proc do |pid|
+        Process.kill('USR1', pid)
+        Thread.exit
+      end
+
       if !@monitorthread || !@monitorthread.alive?
         @monitorthread = Thread.new do
           begin
-            loop do
+            begin
               mb = rss_mb
               if max_mb && mb > max_mb
                 run_gc
                 if max_mb && mb > max_mb
                   Sidekiq.logger.error "#{self}: Exceeded max memory limit (#{mb} > #{max_mb} MB)"
-                  Process.kill('USR1', $$)
-                  Thread.exit
+                  (@killproc || default_killproc).yield($$)
                 end
               end
               sleep sleep_time
-            end
+            end until @stop
           rescue Exception => e
             Sidekiq.logger.error "#{self}: #{$!.class} exception: #{$!}"
           end
@@ -42,7 +46,14 @@ class SidekiqMemlimit
       pagesize * (File.read("/proc/#{$$}/statm").split(' ')[1].to_i rescue 0) >> 10
     end
 
-    def setup
+    def stop_monitorthread
+      @stop = true
+      @monitorthread.join
+      @killproc = nil
+    end
+
+    def setup(&proc)
+      @killproc = proc
       self.sleep_time ||= 5
       if ENV['SIDEKIQ_MAX_MB']
         self.max_mb = ENV['SIDEKIQ_MAX_MB'].to_i
@@ -51,7 +62,5 @@ class SidekiqMemlimit
       self.start_monitorthread
     end
   end
-
 end
 
-SidekiqMemlimit.setup if defined?(Sidekiq::CLI)
